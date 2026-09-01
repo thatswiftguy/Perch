@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Deliberately NOT sandboxed.
+
+	  Perch's whole job is reading Claude Code's files in ~/.claude and writing hook
+	  entries into settings.json. The sandbox would confine it to its own container, so
+	  it would see no sessions at all — and there is no entitlement that grants blanket
+	  access to another app's support directory. Developer ID distribution outside the
+	  App Store permits this; the Mac App Store would not.
+
+	  Add capabilities in Xcode via Signing & Capabilities; they land in this file.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>

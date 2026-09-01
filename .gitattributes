@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Xcode project files are machine-generated. Treat as binary so git never reflows them,
+# and merge conflicts stay legible rather than silently corrupting the project.
+*.pbxproj -text merge=union

@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Perch is AppKit/SwiftUI and reads macOS-only APIs (sysctl process tables,
+    # NSScreen safe-area insets), so there is no meaningful Linux job to add.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: xcodebuild -version && swift --version
+
+      - name: Test
+        # The shared Perch scheme builds the app, the helper and the static core, then
+        # runs PerchCoreTests — so this one command covers every target. Signing is off
+        # because the runner has no keychain identity and none is needed to test.
+        run: |
+          xcodebuild test \
+            -project Perch.xcodeproj \
+            -scheme Perch \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Release build
+        # Catches anything that only breaks under whole-module optimisation, and proves
+        # the bundle still assembles with the helper embedded.
+        run: |
+          xcodebuild build \
+            -project Perch.xcodeproj \
+            -scheme Perch \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO

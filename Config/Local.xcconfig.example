@@ -1,0 +1,11 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in your team to sign with your
+// own certificate instead of ad-hoc. Find the team ID in Xcode › Settings › Accounts,
+// or with: security find-identity -v -p codesigning
+//
+// Everyday development does not need this. It matters when you want the app to keep its
+// identity across rebuilds — macOS ties notification permission and login-item
+// registration to the signature.
+
+PERCH_CODE_SIGN_STYLE = Automatic
+PERCH_CODE_SIGN_IDENTITY = Apple Development
+PERCH_DEVELOPMENT_TEAM = YOUR_TEAM_ID

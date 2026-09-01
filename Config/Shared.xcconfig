@@ -1,0 +1,15 @@
+// Shared build settings, committed.
+//
+// Signing is indirected through variables so the checked-in project needs no Apple
+// account: a fresh clone ad-hoc signs and runs. Developers who want their own certificate
+// set it in Config/Local.xcconfig, which is git-ignored — nobody's team ID ends up in
+// the repository, and nobody else's build breaks because of it.
+
+// Defaults: ad-hoc, no account required. Must come BEFORE the include so the local file
+// can override them — in xcconfig the last assignment wins.
+PERCH_CODE_SIGN_STYLE = Manual
+PERCH_CODE_SIGN_IDENTITY = -
+PERCH_DEVELOPMENT_TEAM =
+
+// Optional per-developer overrides. The `?` makes this a no-op when the file is absent.
+#include? "Local.xcconfig"

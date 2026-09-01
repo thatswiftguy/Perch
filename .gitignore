@@ -1,0 +1,17 @@
+build/
+DerivedData/
+.DS_Store
+
+# SwiftPM leftovers, in case anyone opens Package.swift-era tooling here.
+.build/
+.swiftpm/
+
+# Per-user Xcode state. The shared scheme under xcshareddata/ IS committed, so a fresh
+# clone can build and test without opening Xcode first.
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# Per-developer signing. See Config/Local.xcconfig.example.
+Config/Local.xcconfig
