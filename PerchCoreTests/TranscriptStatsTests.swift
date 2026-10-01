@@ -23,19 +23,13 @@ import Testing
     }
 
     @Test func contextCountsCachedTokensNotJustFreshInput() throws {
-        // A turn resuming from cache reports input_tokens of ~2 and puts everything else
-        // under the cache keys. Summing only input_tokens would show an empty context
-        // window on a session that is actually nearly full.
         let path = try fixture([assistant(input: 2, cacheWrite: 13_481, cacheRead: 38_256)])
         let snapshot = try #require(TranscriptStats.read(path: path))
 
         #expect(snapshot.contextTokens == 51_739)
-        #expect(snapshot.outputTokens == 100)
     }
 
     @Test func ignoresPerIterationUsage() throws {
-        // `usage.iterations[]` repeats the same tokens per internal iteration; adding it
-        // would multiply the count.
         let path = try fixture([assistant(input: 10, cacheWrite: 20, cacheRead: 30)])
         let snapshot = try #require(TranscriptStats.read(path: path))
         #expect(snapshot.contextTokens == 60)
@@ -64,7 +58,6 @@ import Testing
     }
 
     @Test func picksUpTheGitBranch() throws {
-        // Neither the registry record nor the hook payloads carry this.
         let path = try fixture([assistant(input: 1, cacheWrite: 0, cacheRead: 0, branch: "feature/parser")])
         #expect(try #require(TranscriptStats.read(path: path)).gitBranch == "feature/parser")
     }
@@ -80,7 +73,7 @@ import Testing
 
     @Test func usedFractionIsClamped() {
         let over = TranscriptStats.Snapshot(
-            contextTokens: 500_000, contextWindow: 200_000, outputTokens: 0, model: nil, gitBranch: nil)
+            contextTokens: 500_000, contextWindow: 200_000, model: nil, gitBranch: nil)
         #expect(over.usedFraction == 1)
     }
 }
@@ -99,8 +92,6 @@ import Testing
     }
 
     @Test func aSessionOverTwoHundredKMustBeOnTheLongContextModel() throws {
-        // Observed on a real 1M session: message.model is the plain id, with nothing in
-        // the transcript marking the larger window. Usage is the only available signal.
         let snapshot = try #require(TranscriptStats.read(
             path: try transcript(context: 339_318, model: "claude-opus-5")))
         #expect(snapshot.contextWindow == 1_000_000)

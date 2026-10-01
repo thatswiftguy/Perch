@@ -18,27 +18,19 @@ final class SessionStore {
     private var records: [SessionRecord] = []
     private var runtimes: [String: SessionRuntime] = [:]
     private var stats: [String: TranscriptStats.Snapshot] = [:]
-    private var statsInFlight = Set<String>()
+    private var statsLoading: Set<String> = []
     private let spool = EventSpool()
     private var timer: Timer?
     private var tick = 0
 
-    // Cadence: the spool is a stat plus a short read, so it can run often. The registry
-    // sweep shells out to `ps`, so it runs once a second.
     private let pollInterval = 0.25
-    private let sweepEveryNTicks = 4
-
-    var needsInputCount: Int { sessions.count(where: { $0.state.isNeedsInput }) }
-    var workingCount: Int { sessions.count(where: { $0.state.isWorking }) }
+    private let ticksPerRegistrySweep = 4
+    private let replayGracePeriod: TimeInterval = 30
 
     func start() {
         Paths.ensureAppSupport()
-
-        // Replay whatever accumulated while Perch was closed, silently: these events are
-        // history, and firing a burst of "finished" notifications for turns that ended
-        // hours ago is exactly the wrong first impression.
         ingest(spool.drain(), notify: false)
-        refresh()
+        sweepRegistry()
 
         timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { _ in
             Task { @MainActor in self.poll() }
@@ -53,50 +45,37 @@ final class SessionStore {
     private func poll() {
         ingest(spool.drain(), notify: true)
         tick += 1
-        if tick % sweepEveryNTicks == 0 {
-            refresh()
-        } else {
-            rebuild()
-        }
+        if tick % ticksPerRegistrySweep == 0 { sweepRegistry() } else { rebuild() }
     }
 
     private func ingest(_ events: [HookEvent], notify: Bool) {
         guard !events.isEmpty else { return }
 
         for event in events {
-            guard let sid = event.sessionId else { continue }
-            var runtime = runtimes[sid] ?? SessionRuntime()
-            let before = runtime.state
+            guard let id = event.sessionId else { continue }
+            var runtime = runtimes[id] ?? SessionRuntime()
+            let previousState = runtime.state
             runtime.apply(event)
-            runtimes[sid] = runtime
-            Log.debug("\(event.event.rawValue) \(sid.prefix(8)) -> \(runtime.state)")
+            runtimes[id] = runtime
+            Log.debug("\(event.event.rawValue) \(id.prefix(8)) -> \(runtime.state)")
 
-            // Rotation makes us re-read the spool tail, so an old event can arrive twice.
-            // Requiring freshness keeps that replay silent.
-            let isFresh = event.date.timeIntervalSinceNow > -30
-            if notify && isFresh {
-                announce(sid, from: before, to: runtime.state, runtime: runtime)
+            let isReplay = event.date.timeIntervalSinceNow < -replayGracePeriod
+            if notify, !isReplay {
+                announce(id, from: previousState, to: runtime.state, runtime: runtime)
             }
-
-            if event.event == .stop || event.event == .postToolUse {
-                refreshStats(sid, path: runtime.transcriptPath)
-            }
+            if event.event == .stop || event.event == .postToolUse { loadStats(for: id) }
         }
         rebuild()
     }
 
-    /// Fire only on the two transitions a human actually cares about while away from the
-    /// screen. In particular, `.idle` is announced only when arriving from `.working`, so
-    /// a session that was already sitting idle at launch stays quiet.
     private func announce(
-        _ sid: String, from before: SessionState, to after: SessionState, runtime: SessionRuntime
+        _ id: String, from previous: SessionState, to current: SessionState,
+        runtime: SessionRuntime
     ) {
-        let name = runtimes[sid]?.title
-            ?? records.first { $0.sessionId == sid }?.displayName
-            ?? "Claude"
+        let name = runtime.title ?? records.first { $0.sessionId == id }?.displayName ?? "Claude"
 
-        switch (before, after) {
-        case (_, .needsInput(let reason, _)) where !before.isNeedsInput:
+        switch (previous, current) {
+        case (_, .needsInput(let reason, _)) where !previous.isNeedsInput:
             notifier.needsInput(session: name, reason: reason.label)
         case (.working, .idle(let message, _)):
             notifier.finished(
@@ -107,19 +86,15 @@ final class SessionStore {
         }
     }
 
-    private func refresh() {
-        records = SessionRegistry.sweep()
+    private func sweepRegistry() {
+        records = SessionRegistry.liveSessions()
         let live = Set(records.map(\.sessionId))
 
-        // The registry has the final say on existence. A session whose record is gone —
-        // or whose PID was recycled — is dropped even if we never saw its SessionEnd.
         runtimes = runtimes.filter { live.contains($0.key) }
         stats = stats.filter { live.contains($0.key) }
 
-        // Sessions that started before Perch did have no hook events yet, so nothing has
-        // told us where their transcript is. Find it so their stats still fill in.
         for record in records where runtimes[record.sessionId]?.transcriptPath == nil {
-            locateTranscript(record.sessionId)
+            loadStats(for: record.sessionId)
         }
         rebuild()
     }
@@ -133,50 +108,35 @@ final class SessionStore {
                     stats: stats[$0.sessionId]
                 )
             }
-            .sorted {
-                if $0.state.rank != $1.state.rank { return $0.state.rank < $1.state.rank }
-                let l = $0.runtime.lastActivity ?? $0.record.startDate ?? .distantPast
-                let r = $1.runtime.lastActivity ?? $1.record.startDate ?? .distantPast
-                if l != r { return l > r }
-                return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-            }
+            .sorted(by: Self.isOrderedBefore)
 
-        // Assign only on real change. This runs four times a second; without the guard
-        // every tick would invalidate the views and redraw the popover for nothing.
         if rebuilt != sessions { sessions = rebuilt }
     }
 
-    private func locateTranscript(_ sid: String) {
-        guard !statsInFlight.contains(sid) else { return }
-        statsInFlight.insert(sid)
+    private static func isOrderedBefore(_ lhs: Session, _ rhs: Session) -> Bool {
+        if lhs.state.rank != rhs.state.rank { return lhs.state.rank < rhs.state.rank }
+        if lhs.lastSeen != rhs.lastSeen { return lhs.lastSeen > rhs.lastSeen }
+        return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+    }
+
+    private func loadStats(for id: String) {
+        guard !statsLoading.contains(id) else { return }
+        statsLoading.insert(id)
+        let knownPath = runtimes[id]?.transcriptPath
+
         Task.detached(priority: .utility) {
-            let path = Paths.findTranscript(sessionId: sid)
+            let path = knownPath ?? Paths.findTranscript(sessionId: id)
             let snapshot = path.flatMap { TranscriptStats.read(path: $0) }
-            await MainActor.run {
-                self.statsInFlight.remove(sid)
-                if let path {
-                    var runtime = self.runtimes[sid] ?? SessionRuntime()
-                    runtime.transcriptPath = path
-                    self.runtimes[sid] = runtime
-                }
-                if let snapshot { self.stats[sid] = snapshot }
-                self.rebuild()
-            }
+            await MainActor.run { self.applyStats(for: id, path: path, snapshot: snapshot) }
         }
     }
 
-    private func refreshStats(_ sid: String, path: String?) {
-        guard let path, !statsInFlight.contains(sid) else { return }
-        statsInFlight.insert(sid)
-        Task.detached(priority: .utility) {
-            let snapshot = TranscriptStats.read(path: path)
-            await MainActor.run {
-                self.statsInFlight.remove(sid)
-                if let snapshot {
-                    self.stats[sid] = snapshot
-                    self.rebuild()
-                }
-            }
-        }
+    private func applyStats(
+        for id: String, path: String?, snapshot: TranscriptStats.Snapshot?
+    ) {
+        statsLoading.remove(id)
+        if let path { runtimes[id, default: SessionRuntime()].transcriptPath = path }
+        if let snapshot { stats[id] = snapshot }
+        rebuild()
     }
 }

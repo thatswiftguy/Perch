@@ -3,23 +3,22 @@ import SwiftUI
 
 struct PopoverView: View {
     let store: SessionStore
-    @State private var showingSettings = false
-    @State private var hookState = HookState.unknown
 
-    enum HookState { case unknown, installed, stale, missing }
+    @State private var showingSettings = false
+    @State private var hookStatus = HookInstaller().status
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
 
-            if hookState == .missing || hookState == .stale {
+            if hookStatus != .installed {
                 setupBanner
                 Divider()
             }
 
             if showingSettings {
-                SettingsView(store: store, hookState: $hookState)
+                SettingsView(store: store, hookStatus: $hookStatus)
             } else if store.sessions.isEmpty {
                 emptyState
             } else {
@@ -30,7 +29,7 @@ struct PopoverView: View {
             footer
         }
         .frame(width: 380)
-        .onAppear(perform: refreshHookState)
+        .onAppear { hookStatus = HookInstaller().status }
     }
 
     private var header: some View {
@@ -38,7 +37,7 @@ struct PopoverView: View {
             Image(systemName: "bird.fill").foregroundStyle(.tint)
             Text("Perch").font(.system(size: 13, weight: .semibold))
             Spacer()
-            Text(summary)
+            Text(store.sessions.activitySummary)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Button {
@@ -51,15 +50,6 @@ struct PopoverView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-    }
-
-    private var summary: String {
-        if store.sessions.isEmpty { return "No sessions" }
-        var parts: [String] = []
-        if store.needsInputCount > 0 { parts.append("\(store.needsInputCount) waiting") }
-        if store.workingCount > 0 { parts.append("\(store.workingCount) working") }
-        if parts.isEmpty { return "\(store.sessions.count) idle" }
-        return parts.joined(separator: " · ")
     }
 
     private var sessionList: some View {
@@ -90,18 +80,16 @@ struct PopoverView: View {
         .padding(.vertical, 28)
     }
 
-    /// Without hooks the app can still list sessions, but every one of them sits at
-    /// "no activity seen yet" — so the banner explains the gap rather than leaving the
-    /// user staring at a list that never changes.
     private var setupBanner: some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 3) {
-                Text(hookState == .stale ? "Hooks point at an old copy of Perch"
-                                         : "Hooks aren't installed")
+                Text(hookStatus == .stale
+                     ? "Hooks point at an old copy of Perch"
+                     : "Hooks aren't installed")
                     .font(.system(size: 12, weight: .medium))
-                Text(hookState == .stale
+                Text(hookStatus == .stale
                      ? "Re-install them so status keeps updating."
                      : "Perch can list sessions, but can't tell working from waiting without them.")
                     .font(.system(size: 11))
@@ -109,10 +97,8 @@ struct PopoverView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 4)
-            Button(hookState == .stale ? "Re-install" : "Install") {
-                showingSettings = true
-            }
-            .controlSize(.small)
+            Button(hookStatus == .stale ? "Re-install" : "Install") { showingSettings = true }
+                .controlSize(.small)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -130,11 +116,5 @@ struct PopoverView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-    }
-
-    private func refreshHookState() {
-        if !HookInstaller().isInstalled() { hookState = .missing }
-        else if HookInstaller().isStale() { hookState = .stale }
-        else { hookState = .installed }
     }
 }

@@ -5,12 +5,10 @@ struct SessionRow: View {
     let session: Session
 
     var body: some View {
-        // Re-ticks once a second so elapsed counters stay live. Scoped to the row rather
-        // than driven from the store, so nothing redraws when the popover is closed.
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(alignment: .leading, spacing: 4) {
                 header(now: context.date)
-                detail(now: context.date)
+                status(now: context.date)
                 if let stats = session.stats { contextBar(stats) }
             }
         }
@@ -19,24 +17,18 @@ struct SessionRow: View {
         .contentShape(.rect)
         .contextMenu {
             Button("Open Project Folder") {
-                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: session.record.cwd)
+                NSWorkspace.shared.selectFile(
+                    nil, inFileViewerRootedAtPath: session.record.cwd
+                )
             }
-            Button("Copy Session ID") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(session.record.sessionId, forType: .string)
-            }
-            Button("Copy Project Path") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(session.record.cwd, forType: .string)
-            }
+            Button("Copy Session ID") { copy(session.record.sessionId) }
+            Button("Copy Project Path") { copy(session.record.cwd) }
         }
     }
 
     private func header(now: Date) -> some View {
         HStack(spacing: 7) {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
+            Circle().fill(color).frame(width: 8, height: 8)
             Text(session.title)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
@@ -50,11 +42,13 @@ struct SessionRow: View {
         }
     }
 
-    private func detail(now: Date) -> some View {
+    private func status(now: Date) -> some View {
         HStack(spacing: 5) {
             Text(statusText(now: now))
                 .font(.system(size: 11))
-                .foregroundStyle(session.state.isNeedsInput ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                .foregroundStyle(
+                    session.state.isNeedsInput ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary)
+                )
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 0)
@@ -64,12 +58,12 @@ struct SessionRow: View {
 
     private func contextBar(_ stats: TranscriptStats.Snapshot) -> some View {
         HStack(spacing: 6) {
-            GeometryReader { geo in
+            GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.quaternary)
                     Capsule()
-                        .fill(stats.usedFraction > 0.85 ? AnyShapeStyle(.orange) : AnyShapeStyle(.tint))
-                        .frame(width: max(2, geo.size.width * stats.usedFraction))
+                        .fill(stats.isNearlyFull ? AnyShapeStyle(.orange) : AnyShapeStyle(.tint))
+                        .frame(width: max(2, geometry.size.width * stats.usedFraction))
                 }
             }
             .frame(height: 3)
@@ -101,35 +95,40 @@ struct SessionRow: View {
     private func statusText(now: Date) -> String {
         switch session.state {
         case .unknown:
-            // Either Perch launched mid-session, or hooks aren't reporting yet.
-            return "Running · no activity seen yet"
-
-        case .working(let tool, let detail, _):
-            var text = tool ?? "Thinking…"
-            if let tool, let detail { text = "\(tool) · \(Format.truncate(detail, to: 36))" }
-            if session.runtime.turnToolCount > 0 {
-                let n = session.runtime.turnToolCount
-                text += "  ·  \(n) tool\(n == 1 ? "" : "s")"
-            }
-            return text
-
+            "Running · no activity seen yet"
+        case .working:
+            session.state.headline(detailLimit: 36) + toolCountSuffix
         case .needsInput(let reason, _):
-            return reason.label
-
+            reason.label
         case .idle(let message, let since):
-            var text = "Idle · finished \(Format.ago(since, now: now))"
-            if let took = session.runtime.lastTurnDuration {
-                text += " · took \(Format.elapsed(since: since.addingTimeInterval(-took), now: since))"
-            }
-            if session.runtime.backgroundTasks > 0 {
-                let n = session.runtime.backgroundTasks
-                text += " · \(n) background task\(n == 1 ? "" : "s")"
-            }
-            if let message {
-                let line = message.split(separator: "\n").first.map(String.init) ?? message
-                text += " — " + Format.truncate(line, to: 40)
-            }
-            return text
+            idleText(message: message, since: since, now: now)
         }
+    }
+
+    private var toolCountSuffix: String {
+        let count = session.runtime.turnToolCount
+        guard count > 0 else { return "" }
+        return "  ·  \(count) tool\(count == 1 ? "" : "s")"
+    }
+
+    private func idleText(message: String?, since: Date, now: Date) -> String {
+        var text = "Idle · finished \(Format.ago(since, now: now))"
+        if let duration = session.runtime.lastTurnDuration {
+            let start = since.addingTimeInterval(-duration)
+            text += " · took \(Format.elapsed(since: start, now: since))"
+        }
+        let backgroundTasks = session.runtime.backgroundTasks
+        if backgroundTasks > 0 {
+            text += " · \(backgroundTasks) background task\(backgroundTasks == 1 ? "" : "s")"
+        }
+        if let message {
+            text += " — " + Format.truncate(Format.firstLine(message), to: 40)
+        }
+        return text
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }

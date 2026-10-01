@@ -4,7 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     let store: SessionStore
-    @Binding var hookState: PopoverView.HookState
+    @Binding var hookStatus: HookStatus
 
     @State private var error: String?
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -17,7 +17,7 @@ struct SettingsView: View {
             Divider()
             islandSection
             Divider()
-            startupSection
+            launchAtLoginToggle
 
             if let error {
                 Text(error)
@@ -32,7 +32,11 @@ struct SettingsView: View {
     private var hooksSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Claude Code Hooks").font(.system(size: 12, weight: .semibold))
-            Text("Perch adds seven entries to ~/.claude/settings.json so it can tell a working session from one waiting on you. Your existing settings are preserved, and a backup is written the first time.")
+            Text("""
+                 Perch adds seven entries to ~/.claude/settings.json so it can tell a \
+                 working session from one waiting on you. Your existing settings are \
+                 preserved, and a backup is written the first time.
+                 """)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -40,15 +44,20 @@ struct SettingsView: View {
             HStack(spacing: 8) {
                 Label(statusText, systemImage: statusIcon)
                     .font(.system(size: 11))
-                    .foregroundStyle(hookState == .installed ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(
+                        hookStatus == .installed
+                            ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary)
+                    )
                 Spacer()
-                if hookState == .installed || hookState == .stale {
-                    Button("Uninstall") { run(HookInstaller().uninstall) }
+                if hookStatus != .missing {
+                    Button("Uninstall") { perform(HookInstaller().uninstall) }
                         .controlSize(.small)
                 }
-                Button(hookState == .stale ? "Re-install" : "Install") { run(HookInstaller().install) }
-                    .controlSize(.small)
-                    .disabled(hookState == .installed)
+                Button(hookStatus == .stale ? "Re-install" : "Install") {
+                    perform(HookInstaller().install)
+                }
+                .controlSize(.small)
+                .disabled(hookStatus == .installed)
             }
 
             Text("Changes apply to sessions started after installing.")
@@ -88,14 +97,13 @@ struct SettingsView: View {
                 get: { store.preferences.showNotchIsland },
                 set: {
                     store.preferences.showNotchIsland = $0
-                    // Ask the delegate to open or close the window; the preference alone
-                    // shouldn't have window side effects.
                     (NSApp.delegate as? AppDelegate)?.applyIslandPreference()
                 }
             ))
             .toggleStyle(.checkbox)
             .font(.system(size: 11))
-            Text(hasNotch
+
+            Text(NSScreen.anyScreenHasNotch
                  ? "Grows out of the notch. Hover it for the full list."
                  : "This display has no notch, so the island floats just below the menu bar.")
                 .font(.system(size: 10))
@@ -104,11 +112,7 @@ struct SettingsView: View {
         }
     }
 
-    private var hasNotch: Bool {
-        NSScreen.screens.contains { $0.safeAreaInsets.top > 0 }
-    }
-
-    private var startupSection: some View {
+    private var launchAtLoginToggle: some View {
         Toggle("Launch Perch at login", isOn: Binding(
             get: { launchAtLogin },
             set: { setLaunchAtLogin($0) }
@@ -118,32 +122,25 @@ struct SettingsView: View {
     }
 
     private var statusText: String {
-        switch hookState {
+        switch hookStatus {
         case .installed: "Installed"
         case .stale: "Installed, but pointing at an old path"
         case .missing: "Not installed"
-        case .unknown: "Checking…"
         }
     }
 
     private var statusIcon: String {
-        switch hookState {
+        switch hookStatus {
         case .installed: "checkmark.circle.fill"
         case .stale: "exclamationmark.triangle.fill"
-        case .missing, .unknown: "circle"
+        case .missing: "circle"
         }
     }
 
-    private func run(_ action: () throws -> Void) {
+    private func perform(_ action: () throws -> Void) {
         error = nil
-        do {
-            try action()
-        } catch {
-            self.error = error.localizedDescription
-        }
-        if !HookInstaller().isInstalled() { hookState = .missing }
-        else if HookInstaller().isStale() { hookState = .stale }
-        else { hookState = .installed }
+        do { try action() } catch { self.error = error.localizedDescription }
+        hookStatus = HookInstaller().status
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

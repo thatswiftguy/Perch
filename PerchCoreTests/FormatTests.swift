@@ -15,8 +15,6 @@ import Testing
     }
 
     @Test func elapsedNeverGoesNegative() {
-        // Hook timestamps come from another process, so a little clock skew is possible
-        // and "-3s" in the menu bar would look broken.
         #expect(Format.elapsed(since: now.addingTimeInterval(5), now: now) == "0s")
     }
 

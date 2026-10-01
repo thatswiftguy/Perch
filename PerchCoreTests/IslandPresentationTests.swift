@@ -2,8 +2,6 @@ import Foundation
 import Testing
 @testable import PerchCore
 
-/// The island sits in peripheral vision all day, so these rules are the difference
-/// between a useful glance and a distraction. They decide when it appears at all.
 @Suite struct IslandPresentationTests {
     private func session(_ title: String, _ state: SessionState) -> Session {
         var runtime = SessionRuntime()
@@ -25,8 +23,6 @@ import Testing
     }
 
     @Test func aLongIdleSessionIsNotWorthShowing() {
-        // The default has to be invisible. A pill that lingers after every finished turn
-        // becomes wallpaper, and then a genuine alert reads as more wallpaper.
         let idle = session("api", .idle(lastMessage: "done", since: ago(3600)))
         #expect(IslandPresentation.make(sessions: [idle], isHovering: false, now: now).mode == .hidden)
     }
@@ -45,8 +41,6 @@ import Testing
     }
 
     @Test func blockedOutranksWorkingForTheOneVisibleSlot() {
-        // Only one session fits the compact bar, and a blocked one is the only kind that
-        // is actually costing the user time.
         let sessions = [
             session("blocked", .needsInput(.permission, since: ago(5))),
             session("busy", .working(tool: "Bash", detail: "npm test", since: ago(90))),
@@ -74,8 +68,6 @@ import Testing
     }
 
     @Test func hoveringAQuietMachineConfirmsItIsQuiet() {
-        // Regression: an early `guard` on an empty session list returned before the hover
-        // check, so reaching for the notch on an idle machine showed nothing at all.
         let p = IslandPresentation.make(sessions: [], isHovering: true, now: now)
         #expect(p.mode == .expanded)
         #expect(p.sessions.isEmpty)

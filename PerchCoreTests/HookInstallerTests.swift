@@ -2,9 +2,6 @@ import Foundation
 import Testing
 @testable import PerchCore
 
-/// `settings.json` belongs to the user and may hold hand-written configuration, so these
-/// tests care less about "did we add our hooks" than about "did we leave everything else
-/// exactly as we found it".
 @Suite struct HookInstallerTests {
     let dir: URL
     let settings: URL
@@ -37,7 +34,7 @@ import Testing
                 .compactMap { $0["command"]?.stringValue }
             #expect(commands.contains("/Apps/Perch.app/Contents/MacOS/perch-hook \(kind.rawValue)"))
         }
-        #expect(installer.isInstalled())
+        #expect(installer.status == .installed)
     }
 
     @Test func toolEventsCarryAMatcherAndOthersDoNot() throws {
@@ -45,7 +42,6 @@ import Testing
         try installer.install()
         let hooks = try #require(try read()["hooks"])
 
-        // An empty matcher means "every tool". Events without tools must not carry one.
         let preToolUse = try #require(hooks["PreToolUse"]?.arrayValue?.first)
         #expect(preToolUse["matcher"]?.stringValue == "")
 
@@ -91,8 +87,8 @@ import Testing
         #expect(preToolCommands.contains("my-audit-log.sh"))
         #expect(preToolCommands.contains { $0.contains("perch-hook") })
 
-        // An event we don't subscribe to must survive completely untouched.
-        #expect(hooks["PreCompact"]?.arrayValue?.count == 1)
+        #expect(hooks["PreCompact"]?.arrayValue?.count == 1,
+                "an event we do not subscribe to must survive untouched")
     }
 
     @Test func uninstallRestoresTheOriginalExactly() throws {
@@ -106,11 +102,11 @@ import Testing
         let before = try read()
 
         try installer.install()
-        #expect(installer.isInstalled())
+        #expect(installer.status == .installed)
         try installer.uninstall()
 
         #expect(try read() == before)
-        #expect(!installer.isInstalled())
+        #expect(installer.status == .missing)
     }
 
     @Test func uninstallLeavesNoEmptyScaffolding() throws {
@@ -118,8 +114,7 @@ import Testing
         try installer.install()
         try installer.uninstall()
 
-        // No orphaned "hooks": {} — the file should look like we were never here.
-        #expect(try read()["hooks"] == nil)
+        #expect(try read()["hooks"] == nil, "no orphaned scaffolding may be left behind")
     }
 
     @Test func installingTwiceDoesNotDuplicateEntries() throws {
@@ -139,15 +134,13 @@ import Testing
     @Test func detectsHooksPointingAtAnOldCopyOfTheApp() throws {
         try write("{}")
         try installer.install()
-        #expect(!installer.isStale())
+        #expect(installer.status == .installed)
 
-        // Simulate the user dragging Perch.app somewhere else.
         let moved = HookInstaller(settingsURL: settings, executable: "/Applications/Perch.app/Contents/MacOS/perch-hook")
-        #expect(moved.isInstalled())
-        #expect(moved.isStale())
+        #expect(moved.status == .stale)
 
         try moved.install()
-        #expect(!moved.isStale())
+        #expect(moved.status == .installed)
     }
 
     @Test func refusesToTouchAFileItCannotParse() throws {
@@ -155,8 +148,8 @@ import Testing
         try write(garbage)
 
         #expect(throws: HookInstaller.InstallError.self) { try installer.install() }
-        // The point of throwing: the user's file is still whatever it was.
-        #expect(try String(contentsOf: settings, encoding: .utf8) == garbage)
+        #expect(try String(contentsOf: settings, encoding: .utf8) == garbage,
+                "the user's file must be left exactly as it was")
     }
 
     @Test func writesOneBackupBeforeTheFirstEdit() throws {
@@ -168,20 +161,19 @@ import Testing
         #expect(contents.contains("skipWorkflowUsageWarning"))
         #expect(!contents.contains("perch-hook"), "backup must predate our changes")
 
-        // A second edit must not overwrite the pristine copy with an already-modified one.
         try installer.uninstall()
         try installer.install()
-        #expect(try String(contentsOf: backup, encoding: .utf8) == contents)
+        #expect(try String(contentsOf: backup, encoding: .utf8) == contents,
+                "a later edit must not overwrite the pristine backup")
     }
 
     @Test func handlesAMissingSettingsFile() throws {
         #expect(!FileManager.default.fileExists(atPath: settings.path))
         try installer.install()
-        #expect(installer.isInstalled())
+        #expect(installer.status == .installed)
     }
 }
 
-/// Installing must survive the shapes a real machine puts `settings.json` in.
 @Suite struct HookInstallerEnvironmentTests {
     private func scratch() throws -> URL {
         let dir = URL(filePath: NSTemporaryDirectory())
@@ -191,20 +183,16 @@ import Testing
     }
 
     @Test func createsTheConfigDirectoryOnAFreshMachine() throws {
-        // Claude Code installed but never run: ~/.claude doesn't exist yet, and an
-        // unguarded write fails with an error the user can't act on.
         let root = try scratch()
         let settings = root.appending(path: "nested/.claude/settings.json")
         let installer = HookInstaller(settingsURL: settings, executable: "/tmp/perch-hook")
 
         try installer.install()
-        #expect(installer.isInstalled())
+        #expect(installer.status == .installed)
         #expect(FileManager.default.fileExists(atPath: settings.path))
     }
 
     @Test func writesThroughASymlinkInsteadOfReplacingIt() throws {
-        // Developers routinely symlink settings.json into a dotfiles repo. An atomic write
-        // to the link path would swap the link for a regular file and quietly detach it.
         let root = try scratch()
         let real = root.appending(path: "dotfiles-settings.json")
         try #"{"skipWorkflowUsageWarning": true}"#.write(to: real, atomically: true, encoding: .utf8)
@@ -219,7 +207,6 @@ import Testing
         #expect(attributes[.type] as? FileAttributeType == .typeSymbolicLink,
                 "the symlink must survive the write")
 
-        // And the content must have landed on the real file behind it.
         let written = try String(contentsOf: real, encoding: .utf8)
         #expect(written.contains("perch-hook"))
         #expect(written.contains("skipWorkflowUsageWarning"))

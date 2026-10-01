@@ -58,7 +58,6 @@
 			};
 			name = Debug;
 			};
-		25E49225461AA0A6AE939560 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
 		289C27E3926D305FA9CA80CD /* libPerchCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B5FFB6CD7A8CA6509922CDBF; };
 		290926C9955CDB11001049D4 /* MenuBarLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabel.swift; sourceTree = "<group>"; };
 		2AF052455E40796EE3FB5884 /* NotchWindowController.swift */ = {isa = PBXBuildFile; fileRef = 03CE4C12DE83D0C256461FD6; };
@@ -123,11 +122,12 @@
 				99B7603EC05A416FFEB76722 /* IslandCompactBar.swift */,
 				315F307AE543622CC05424DC /* IslandExpandedPanel.swift */,
 				D2F43E4167246D62B8B702C3 /* IslandSnapshot.swift */,
+				B30B4520916C2E8CBE014BC7 /* IslandStyle.swift */,
 				0650C3AA55326D434112B7B4 /* NotchGeometry.swift */,
 				D52F7D4F7C64A897B42C3D85 /* NotchIslandView.swift */,
 				214A9116338B954F1E5FC231 /* NotchShape.swift */,
 				03CE4C12DE83D0C256461FD6 /* NotchWindowController.swift */,
-				25E49225461AA0A6AE939560 /* Palette.swift */,
+				7F5076AFD2A2ADAE94B44815 /* StateDot.swift */,
 			);
  path = Notch; sourceTree = "<group>"; };
 		42D919C2698A526263AC25D4 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 8EBA74720A3560C8FA4BBD93 /* perch-hook */; targetProxy = CDF648B9CABC1A7A2D045A4C; };
@@ -275,11 +275,14 @@
 			};
 		782BA6C5A3CE1FAB9FAB2819 /* HookEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookEvent.swift; sourceTree = "<group>"; };
 		790FFE29FEE5364B84AEEB90 /* SessionRecord.swift */ = {isa = PBXBuildFile; fileRef = 2B9420115A892A4D2551B437; };
+		7923F353034D28CB32331304 /* StateDot.swift */ = {isa = PBXBuildFile; fileRef = 7F5076AFD2A2ADAE94B44815; };
+		7A4BCEEA605204BD92EDC799 /* IslandStyle.swift */ = {isa = PBXBuildFile; fileRef = B30B4520916C2E8CBE014BC7; };
 		7B8DFA7527ACC0FE6C806274 /* HoverState.swift */ = {isa = PBXBuildFile; fileRef = 1EAAE9DDF697EF97305E5FD9; };
 		7EF2517A8FE63F4681EC5EEA /* Build configuration list for PBXProject */ = {isa = XCConfigurationList; buildConfigurations = (
 				969595A508627F35A110362C /* Debug */,
 				4C95F91A6D5CD87BB5DB8FDD /* Release */,
 			); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		7F5076AFD2A2ADAE94B44815 /* StateDot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateDot.swift; sourceTree = "<group>"; };
 		7F51FD212C4A92E62A1BC3CE /* IslandPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandPresentation.swift; sourceTree = "<group>"; };
 		7FABBF8977A58EF209AD2345 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		8061B6F0FE6CE52448D248AE /* Release */ = {isa = XCBuildConfiguration;
@@ -389,6 +392,7 @@
 		AA0C90858DA23EFAE0D6AD16 /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
 		AAD767E3C256A4D26EA99A5B /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		AAF3C9D0B36E6C4FE81EDEF0 /* TranscriptStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStats.swift; sourceTree = "<group>"; };
+		B30B4520916C2E8CBE014BC7 /* IslandStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandStyle.swift; sourceTree = "<group>"; };
 		B5976E00B8402C9F79CA1CCC /* Doctor.swift */ = {isa = PBXBuildFile; fileRef = FEBD318BB43DC4DC02D199AF; };
 		B5FFB6CD7A8CA6509922CDBF /* libPerchCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libPerchCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		B60D09FE3A98B9D06B10826F /* PopoverView.swift */ = {isa = PBXBuildFile; fileRef = 817BD095C1AA1E9271E7A412; };
@@ -413,7 +417,6 @@
 			);
  path = "perch-hook"; sourceTree = "<group>"; };
 		C33CA2E58FC36FF6B5757BC4 /* SessionState.swift */ = {isa = PBXBuildFile; fileRef = 40C97B4AE0308C4A0798C708; };
-		C425B127C32844B1AF535B88 /* Palette.swift */ = {isa = PBXBuildFile; fileRef = 25E49225461AA0A6AE939560; };
 		C44CC083137D2D18DEDA0E82 /* Notifier.swift */ = {isa = PBXBuildFile; fileRef = 0FEDD1B37589C48DEB1736EA; };
 		C98163CB658D88B285AF5672 /* EventSpool.swift */ = {isa = PBXBuildFile; fileRef = E514F02DA971F51EA7C69A29; };
 		CAA635F5136F8FC15B7DCFDF /* Format.swift */ = {isa = PBXBuildFile; fileRef = 8311E9EEA5C59310001FDE47; };
@@ -451,11 +454,12 @@
 			9D500FC1EEC93B26E70E2C31 /* IslandCompactBar.swift in Sources */,
 			4B99AE5FCB65C1B7E902A6B3 /* IslandExpandedPanel.swift in Sources */,
 			80813AB101987EBF77E5FB21 /* IslandSnapshot.swift in Sources */,
+			7A4BCEEA605204BD92EDC799 /* IslandStyle.swift in Sources */,
 			186CF46C98A1F729A7AB7BC2 /* NotchGeometry.swift in Sources */,
 			1A55CA8CF490E7A16617EBFC /* NotchIslandView.swift in Sources */,
 			9104D9D76A020447D05250D1 /* NotchShape.swift in Sources */,
 			2AF052455E40796EE3FB5884 /* NotchWindowController.swift in Sources */,
-			C425B127C32844B1AF535B88 /* Palette.swift in Sources */,
+			7923F353034D28CB32331304 /* StateDot.swift in Sources */,
 			C44CC083137D2D18DEDA0E82 /* Notifier.swift in Sources */,
 			EE6CFF4A0C59C2CE90F6BFA7 /* PerchApp.swift in Sources */,
 			FE0770F75BF04A3C723BA705 /* Preferences.swift in Sources */,

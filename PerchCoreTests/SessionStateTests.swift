@@ -44,7 +44,6 @@ import Testing
         runtime.apply(event(.preToolUse, ["tool_name": .string("Read")], at: later))
         runtime.apply(event(.postToolUse, ["tool_name": .string("Read")], at: later))
 
-        // Elapsed should track the turn, not reset to zero every time a tool returns.
         #expect(runtime.state.since == t0)
         #expect(runtime.state.isWorking)
     }
@@ -58,8 +57,6 @@ import Testing
         ]))
 
         #expect(runtime.state.isNeedsInput)
-        // This is the whole reason hooks exist: nothing in the transcript distinguishes
-        // this state from ordinary work.
         #expect(runtime.state.rank < SessionState.working(tool: nil, detail: nil, since: t0).rank)
     }
 
@@ -94,9 +91,6 @@ import Testing
         runtime.apply(event(.preToolUse, ["tool_name": .string("Task")]))
         let before = runtime.state
 
-        // A subagent runs its own tool loop; folding it in would make one Task call look
-        // like a storm of unrelated activity, and its Stop would look like the parent
-        // finishing.
         runtime.apply(event(.preToolUse, [
             "tool_name": .string("Grep"), "agent_id": .string("agent-1"),
         ]))
@@ -124,8 +118,6 @@ import Testing
 
     @Test func unknownFieldsInAPayloadAreHarmless() {
         var runtime = SessionRuntime()
-        // Claude Code adds hook fields between releases; a strict decoder would throw here
-        // and the app would go blind.
         runtime.apply(event(.stop, [
             "some_future_field": .object(["nested": .array([.number(1)])]),
             "last_assistant_message": .string("ok"),

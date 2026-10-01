@@ -1,29 +1,25 @@
 import Foundation
 
 public enum NeedsInputReason: Equatable, Sendable {
-    case permission     // a tool wants approval
-    case agentInput     // Claude asked a question
+    case permission
+    case agentInput
     case other(String)
 
     public var label: String {
         switch self {
         case .permission: "Needs permission"
         case .agentInput: "Waiting on you"
-        case .other(let s): s
+        case .other(let message): message
         }
     }
 }
 
 public enum SessionState: Equatable, Sendable {
-    /// In the registry but we've seen no events — Perch started after the session did,
-    /// or hooks aren't installed yet.
     case unknown
     case working(tool: String?, detail: String?, since: Date)
     case needsInput(NeedsInputReason, since: Date)
     case idle(lastMessage: String?, since: Date)
 
-    /// Sort weight and badge priority. `needsInput` outranks everything because it is the
-    /// only state that is actually blocked on the human.
     public var rank: Int {
         switch self {
         case .needsInput: 0
@@ -36,17 +32,45 @@ public enum SessionState: Equatable, Sendable {
     public var since: Date? {
         switch self {
         case .unknown: nil
-        case .working(_, _, let d), .needsInput(_, let d), .idle(_, let d): d
+        case .working(_, _, let date), .needsInput(_, let date), .idle(_, let date): date
         }
     }
 
     public var isWorking: Bool { if case .working = self { true } else { false } }
     public var isNeedsInput: Bool { if case .needsInput = self { true } else { false } }
     public var isIdle: Bool { if case .idle = self { true } else { false } }
+
+    public var headline: String {
+        switch self {
+        case .unknown: "Running"
+        case .working(let tool, _, _): tool ?? "Thinking"
+        case .needsInput(let reason, _): reason.label
+        case .idle: "Idle"
+        }
+    }
+
+    public func headline(detailLimit: Int) -> String {
+        guard case .working(let tool?, let detail?, _) = self else { return headline }
+        return "\(tool) · \(Format.truncate(detail, to: detailLimit))"
+    }
 }
 
-/// Everything hooks tell us about one session. The registry supplies identity and
-/// liveness; this supplies behavior.
+extension SessionState: CustomStringConvertible {
+    public var description: String {
+        switch self {
+        case .unknown:
+            "unknown"
+        case .working(let tool, let detail, _):
+            "working" + (tool.map { " · \($0)" } ?? "")
+                + (detail.map { " · \(Format.truncate($0, to: 60))" } ?? "")
+        case .needsInput(let reason, _):
+            "needs input · \(reason.label)"
+        case .idle(let message, _):
+            "idle" + (message.map { " · \(Format.truncate(Format.firstLine($0), to: 50))" } ?? "")
+        }
+    }
+}
+
 public struct SessionRuntime: Equatable, Sendable {
     public init() {}
 
@@ -58,22 +82,14 @@ public struct SessionRuntime: Equatable, Sendable {
     public var turnToolCount: Int = 0
     public var lastTurnDuration: TimeInterval?
     public var lastActivity: Date?
-    /// Set on Stop when work is still running in the background, so we can say
-    /// "done, but N background tasks" instead of a bare "finished".
     public var backgroundTasks: Int = 0
 
-    /// Fold one hook event into the state machine. Callers compare `state` before and
-    /// after to decide whether the change is worth a notification.
     public mutating func apply(_ event: HookEvent) {
         let at = event.date
         lastActivity = at
 
         if let path = event.transcriptPath { transcriptPath = path }
-
-        // Subagents run their own tool loops. Folding those into the parent would make a
-        // single `Task` call look like a storm of activity, so we take the timestamp and
-        // drop the rest.
-        if event.isSubagent { return }
+        guard !event.isSubagent else { return }
 
         switch event.event {
         case .sessionStart:
@@ -82,7 +98,7 @@ public struct SessionRuntime: Equatable, Sendable {
             state = .unknown
 
         case .sessionEnd:
-            break  // removal is the registry's job, not ours
+            break
 
         case .userPromptSubmit:
             title = event.sessionTitle ?? title
@@ -96,8 +112,6 @@ public struct SessionRuntime: Equatable, Sendable {
             state = .working(tool: event.toolName, detail: event.toolDetail, since: at)
 
         case .postToolUse:
-            // Between tools Claude is thinking, not idle. Keep the turn's start time so
-            // the elapsed counter tracks the turn rather than resetting on every tool.
             state = .working(tool: nil, detail: nil, since: turnStart ?? at)
 
         case .notification:
@@ -109,32 +123,14 @@ public struct SessionRuntime: Equatable, Sendable {
             case "idle_prompt":
                 state = .idle(lastMessage: nil, since: at)
             default:
-                if let m = event.message { state = .needsInput(.other(m), since: at) }
+                if let message = event.message { state = .needsInput(.other(message), since: at) }
             }
 
         case .stop:
-            if let start = turnStart { lastTurnDuration = at.timeIntervalSince(start) }
+            if let turnStart { lastTurnDuration = at.timeIntervalSince(turnStart) }
             backgroundTasks = event.backgroundTaskCount
             turnStart = nil
             state = .idle(lastMessage: event.lastAssistantMessage, since: at)
-        }
-    }
-}
-
-extension SessionState: CustomStringConvertible {
-    /// Compact one-line form for logs. Tool detail is a full shell command or file path,
-    /// so it is clipped rather than dumped.
-    public var description: String {
-        switch self {
-        case .unknown:
-            "unknown"
-        case .working(let tool, let detail, _):
-            "working" + (tool.map { " \($0)" } ?? "")
-                + (detail.map { " (\($0.prefix(60)))" } ?? "")
-        case .needsInput(let reason, _):
-            "needsInput · \(reason.label)"
-        case .idle(let message, _):
-            "idle" + (message.map { " (\($0.prefix(60)))" } ?? "")
         }
     }
 }
